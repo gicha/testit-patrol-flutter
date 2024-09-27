@@ -9,6 +9,8 @@ environment:
   flutter: '>=3.10.0'
 
 dependencies:
+  flutter:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   http: ^1.1.0

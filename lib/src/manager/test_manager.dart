@@ -1,18 +1,25 @@
 #!/usr/bin/env dart
 
+import 'dart:io' as io;
+
 import 'package:adapters_flutter/src/enum/outcome_enum.dart';
 import 'package:adapters_flutter/src/manager/api_manager_.dart';
 import 'package:adapters_flutter/src/manager/config_manager.dart';
 import 'package:adapters_flutter/src/manager/log_manager.dart';
 import 'package:adapters_flutter/src/model/api/link_api_model.dart';
 import 'package:adapters_flutter/src/model/test_result_model.dart';
+import 'package:adapters_flutter/src/patrol/constants.dart' as constants;
+import 'package:adapters_flutter/src/patrol/global_state.dart' as global_state;
 import 'package:adapters_flutter/src/service/config/file_config_service.dart';
 import 'package:adapters_flutter/src/service/validation_service.dart';
 import 'package:adapters_flutter/src/storage/test_result_storage.dart';
 import 'package:adapters_flutter/src/util/platform_util.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart';
+import 'package:patrol/patrol.dart';
+import 'package:patrol_finders/patrol_finders.dart' as finders;
 import 'package:patrol_finders/patrol_finders.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:test_api/src/backend/invoker.dart'; // ignore: depend_on_referenced_packages, implementation_imports
@@ -77,6 +84,101 @@ Future<void> tmsTestWidgets(
             tags: tags,
             title: title,
             workItemsIds: workItemsIds)));
+
+Future<void> tmsPatrolTest(
+  final String description,
+  final PatrolTesterCallback callback, {
+  final String? externalId,
+  final Set<Link>? links,
+  final String? title,
+  final Set<String>? workItemsIds,
+
+  /// Common test parameters
+  bool semanticsEnabled = true,
+  String? skip,
+  Set<String>? tags,
+  Timeout? timeout,
+  TestVariant<Object?> variant = const DefaultTestVariant(),
+
+  /// Patrol-specific configuration
+  finders.PatrolTesterConfig config = const finders.PatrolTesterConfig(),
+  NativeAutomatorConfig nativeAutomatorConfig = const NativeAutomatorConfig(),
+  LiveTestWidgetsFlutterBindingFramePolicy framePolicy =
+      LiveTestWidgetsFlutterBindingFramePolicy.fadePointers,
+}) {
+  final automator = NativeAutomator(config: nativeAutomatorConfig);
+  final automator2 = NativeAutomator2(config: nativeAutomatorConfig);
+  final patrolBinding = PatrolBinding.ensureInitialized(nativeAutomatorConfig)
+    ..framePolicy = framePolicy;
+  return tmsTestWidgets(
+    description,
+    (widgetTester) async {
+      if (!constants.hotRestartEnabled) {
+        // If Patrol's native automation feature is enabled, then this test will
+        // be executed only if the native side requested it to be executed.
+        // Otherwise, it returns early.
+
+        final requestedToExecute = await patrolBinding.patrolAppService
+            .waitForExecutionRequest(global_state.currentTestFullName);
+
+        if (!requestedToExecute) {
+          return;
+        }
+      }
+      if (io.Platform.isIOS) {
+        widgetTester.binding.platformDispatcher.onSemanticsEnabledChanged = () {
+          // This callback is empty on purpose. It's a workaround for tests
+          // failing on iOS.
+          //
+          // See https://github.com/leancodepl/patrol/issues/1474
+        };
+      }
+      await automator.configure();
+      // We don't have to call this line because automator.configure() does the same.
+      // await automator2.configure();
+
+      final patrolTester = PatrolIntegrationTester(
+        tester: widgetTester,
+        nativeAutomator: automator,
+        nativeAutomator2: automator2,
+        config: config,
+      );
+      await callback(patrolTester);
+
+      // ignore: prefer_const_declarations
+      final waitSeconds = const int.fromEnvironment('PATROL_WAIT');
+      final waitDuration = Duration(seconds: waitSeconds);
+
+      if (debugDefaultTargetPlatformOverride !=
+          patrolBinding.workaroundDebugDefaultTargetPlatformOverride) {
+        debugDefaultTargetPlatformOverride =
+            patrolBinding.workaroundDebugDefaultTargetPlatformOverride;
+      }
+
+      if (waitDuration > Duration.zero) {
+        final stopwatch = Stopwatch()..start();
+        await Future.doWhile(() async {
+          await widgetTester.pump();
+          if (stopwatch.elapsed > waitDuration) {
+            stopwatch.stop();
+            return false;
+          }
+
+          return true;
+        });
+      }
+    },
+    skip: skip,
+    timeout: timeout,
+    semanticsEnabled: semanticsEnabled,
+    variant: variant,
+    tags: tags,
+    externalId: externalId,
+    title: title,
+    workItemsIds: workItemsIds,
+    links: links,
+  );
+}
 
 Future<void> tmsPatrolWidgetTest(
   final String description,
