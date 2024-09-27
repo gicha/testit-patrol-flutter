@@ -13,6 +13,7 @@ import 'package:adapters_flutter/src/util/platform_util.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart';
+import 'package:patrol_finders/patrol_finders.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:test_api/src/backend/invoker.dart'; // ignore: depend_on_referenced_packages, implementation_imports
 import 'package:universal_io/io.dart';
@@ -76,6 +77,43 @@ Future<void> tmsTestWidgets(
             tags: tags,
             title: title,
             workItemsIds: workItemsIds)));
+
+Future<void> tmsPatrolWidgetTest(
+  final String description,
+  final PatrolWidgetTestCallback callback, {
+  final String? externalId,
+  final Set<Link>? links,
+  final String? title,
+  final Set<String>? workItemsIds,
+
+  /// Common test parameters
+  bool semanticsEnabled = true,
+  String? skip,
+  Set<String>? tags,
+  Timeout? timeout,
+  TestVariant<Object?> variant = const DefaultTestVariant(),
+
+  /// Patrol-specific configuration
+  PatrolTesterConfig config = const PatrolTesterConfig(),
+}) =>
+    tmsTestWidgets(
+      description,
+      (widgetTester) => callback(
+        PatrolTester(
+          tester: widgetTester,
+          config: config,
+        ),
+      ),
+      skip: skip,
+      timeout: timeout,
+      semanticsEnabled: semanticsEnabled,
+      variant: variant,
+      tags: tags,
+      externalId: externalId,
+      title: title,
+      workItemsIds: workItemsIds,
+      links: links,
+    );
 
 String? _getSafeExternalId(final String? externalId, final String? testName) {
   var output =
@@ -161,7 +199,7 @@ Future<void> _testAsync(
         .replaceAll(_getGroupName() ?? '', '')
         .trim();
     localResult.namespace =
-        basenameWithoutExtension(liveTest?.suite.path ?? '');
+        basenameWithoutExtension(liveTest?.suite.path ?? 'test_tms');
     localResult.startedOn = startedOn;
     localResult.title = title ?? liveTest?.test.name ?? '';
     localResult.workItemIds = workItemsIds ?? {};

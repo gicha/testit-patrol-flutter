@@ -22,6 +22,8 @@ dependencies:
   test_api: '>=0.5.1 <2.0.0'
   universal_io: ^2.2.2
   uuid: ^4.2.2
+  patrol: ^3.11.0
+  patrol_finders: ^2.1.2
 
 dev_dependencies:
   flutter_lints: ^3.0.1
